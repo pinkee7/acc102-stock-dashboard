@@ -4,7 +4,11 @@
 This interactive tool helps individual investors and finance students quickly compare the historical performance and risk characteristics of multiple US stocks without using complex financial terminals. The intended audience is retail investors with basic financial knowledge.
 
 ## 2. Data Source
-- **Source**: Yahoo Finance (via `yfinance` Python library)
+## 2. Data Source
+The application intelligently sources financial data through multiple layers to ensure reliability:
+1.  **Kaggle (Primary)**: Leverages the "Stock 2025" dataset, a comprehensive collection of S&P 500 company data from 2020 to 2025. This provides a rich, static foundation for analysis.
+2.  **Yahoo Finance (Secondary)**: Fetches real-time market data via the `yfinance` library, offering the most up-to-date information when an internet connection is available.
+3.  **Local CSV (Fallback)**: A local, pre-loaded dataset (`sample_stock_data.csv`) serves as a fail-safe, guaranteeing the application remains functional and demonstrable even without internet access or if upstream data sources encounter issues.
 - **Access Date**: 21 April 2026
 - **Key Fields**: Adjusted Close Price, Ticker Symbols (AAPL, MSFT, GOOGL, AMZN, TSLA, JPM, NVDA, META)
 
