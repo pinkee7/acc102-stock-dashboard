@@ -1,43 +1,41 @@
-# Stock Analysis Dashboard (ACC102 Track 4)
+# Stock Risk & Return Dashboard
 
-## 1. Problem & Intended User
-This interactive tool helps individual investors and finance students quickly compare historical performance and risk characteristics of multiple US stocks. The intended audience is retail investors with basic financial knowledge who want a simple, visual way to understand risk-return trade-offs.
+## 1. Problem & User
+This tool helps individual investors compare the risk and return 
+characteristics of selected stocks. The target audience includes 
+finance students and retail investors who want a quick overview 
+of historical performance and risk levels.
 
-## 2. Data Source
-- **Source**: `sample_stock_data.csv` - Historical adjusted close price data for demonstration purposes.
-- **Data Generation**: The dataset was compiled using price ranges derived from publicly available historical stock data (Yahoo Finance) to simulate realistic price movements. The data is intended solely for educational demonstration of the analytical workflow.
-- **Access Date**: 21 April 2026
-- **Key Fields**: Date (index), Adjusted Close Prices for 8 US stocks (AAPL, MSFT, GOOGL, AMZN, TSLA, JPM, NVDA, META)
-- **Time Period Covered**: January 2024 to April 2024 (approximately 3 months of daily data)
-- **Note**: This is a static sample dataset. In a production environment, the tool could be connected to a live data API such as Yahoo Finance or Alpha Vantage.
+## 2. Data
+- Source: Yahoo Finance (via CSV export)  
+- Access date: [2026.4.22]  
+- Tickers: AAPL, AMZN, GOOGL, JPM, MSFT, NVDA, TSLA, UNH
+- Period: 2020-01-01 to 2024-12-31  
 
-## 3. Methods (Python Workflow)
-- **Data Loading**: `pandas.read_csv()` with date parsing and setting index.
-- **Data Transformation**: Calculation of daily percentage returns, cumulative returns, rolling volatility.
-- **Analysis**: Annualized return, annualized volatility, Sharpe ratio, maximum drawdown.
-- **Visualization**: Interactive charts using Plotly (line, bar, heatmap, pie).
-- **Interface**: Streamlit sidebar for user controls and real-time updates.
+## 3. Methods
+- Data loading with pandas  
+- Calculation of annual return, volatility, Sharpe ratio, max drawdown, VaR  
+- Interactive visualisation with Plotly  
+- Streamlit app for user interaction  
 
-## 4. Key Findings (Illustrative Example)
-- From Jan to Jun 2024, NVDA showed the highest cumulative return but also the highest volatility.
-- MSFT and AAPL demonstrated more stable growth with lower volatility and higher Sharpe ratios.
-- The correlation heatmap reveals strong positive correlation among tech stocks, especially between MSFT and AAPL.
+## 4. Key Findings
 
-## 5. How to Run Locally
-1. Clone this repository:
+- **TSLA** delivered the highest annualised return over the period but also exhibited the highest volatility and the deepest maximum drawdown, representing a classic high‑risk/high‑reward profile.
+- **MSFT** and **GOOGL** achieved the highest Sharpe ratios, meaning they offered the best risk‑adjusted returns among the selected stocks.
+- **JPM** showed the lowest correlation with the technology stocks (TSLA, AAPL, MSFT, GOOGL, AMZN), highlighting its potential diversification benefit in a multi‑sector portfolio.
+- **AAPL** demonstrated the smallest maximum drawdown among the tech names, suggesting relatively better downside resilience.
+- According to the 95% Value‑at‑Risk, **TSLA** had the largest expected daily loss, while **JPM** had the smallest, reflecting differences in inherent business risk.
 
+## 5. How to Run
+1. Clone the repository
+2. Install dependencies: pip install -r requirements.txt
+3. Run the app: streamlit run app.py
+4. Open http://localhost:8501 in your browser
 
-## 6. Demo Video
-[Insert your Mediasite or YouTube unlisted link here]
+## 6. Product Link / Demo
+(填写你的视频链接)
 
-## 7. Limitations & Future Work
-- Data is limited to a six-month sample period and eight tickers; real-world applications would require broader historical coverage.
-- The equal-weight portfolio pie chart is illustrative only; future versions could allow custom weighting.
-- Risk-free rate assumed to be zero for Sharpe ratio calculation; could incorporate Treasury yields in future iterations.
-
----
-
-**Author:** [Your Name]
-**Student ID:** [Your Student ID]
-**Course:** ACC102 - Python Data Product
-**Date:** April 2026
+## 7. Limitations & Next Steps
+- Only historical data, no forward‑looking predictions
+- Small sample of stocks, may not represent the whole market
+- Next step: add more stocks, enable real‑time data
