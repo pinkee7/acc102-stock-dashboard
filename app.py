@@ -1,84 +1,77 @@
 """
-ACC102 Track 4 - Advanced Interactive Stock Analysis Tool
+ACC102 Track 4 - Interactive Stock Analysis Tool (Local Data Version)
 Author: [Your Name]
 Date: April 2026
-Description: Multi-view stock analysis dashboard. Fetches data from a Kaggle dataset 
-             with a local CSV file as a fallback.
+Description: Multi-view stock analysis dashboard using local CSV sample data.
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
 import os
 
-# Try to import kagglehub and yfinance
-try:
-    import kagglehub
-    KAGGLEHUB_AVAILABLE = True
-except ImportError:
-    KAGGLEHUB_AVAILABLE = False
-
-try:
-    import yfinance as yf
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
-
 # ----- Page Config -----
-st.set_page_config(page_title="Advanced Stock Analyzer", layout="wide")
-st.title("📊 Advanced Stock Analysis Dashboard")
-st.markdown("Multi-view analysis tool for comparing US stocks with interactive visualizations, powered by real market data from Kaggle & Yahoo Finance.")
+st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
+st.title("📊 Stock Analysis Dashboard")
+st.markdown("Interactive multi-view analysis of US tech stocks using sample historical data.")
 
-# ----- Helper function to load local fallback data -----
+# ----- Helper function to load local data -----
 @st.cache_data
-def load_fallback_data():
+def load_data():
     """Load sample stock data from local CSV file."""
     file_path = os.path.join(os.path.dirname(__file__), "sample_stock_data.csv")
     if os.path.exists(file_path):
-        df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+        df = pd.read_csv(file_path)
+        # Force first column to be datetime index
+        df.iloc[:, 0] = pd.to_datetime(df.iloc[:, 0])
+        df.set_index(df.columns[0], inplace=True)
+        df.index.name = 'Date'
         return df
     else:
+        st.error("Sample data file 'sample_stock_data.csv' not found in project folder.")
         return None
 
-# ----- Sidebar Controls (Enhanced) -----
+# ----- Sidebar Controls -----
 st.sidebar.header("🎮 User Controls")
 
-# Data source selection
-data_source_option = st.sidebar.radio(
-    "Select data source:",
-    options=["Kaggle (S&P 500 2020-2025)", "Yahoo Finance (Live)", "Local CSV (Fallback)"],
-    index=0,
-    help="Kaggle provides a rich, static dataset. Yahoo Finance fetches live data. Local CSV is a minimal backup."
-)
+# Stock selection (from available columns in data)
+data = load_data()
+if data is not None:
+    available_tickers = list(data.columns)
+else:
+    available_tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "JPM", "NVDA", "META"]
 
-# Stock selection
-available_tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "JPM", "NVDA", "META"]
 tickers = st.sidebar.multiselect(
     "Select stock tickers:",
     options=available_tickers,
-    default=["AAPL", "MSFT", "GOOGL", "NVDA"]
+    default=available_tickers[:4] if len(available_tickers) >= 4 else available_tickers
 )
 
 # Date range
-start_date = st.sidebar.date_input("Start date", value=pd.to_datetime("2020-01-01"))
-end_date = st.sidebar.date_input("End date", value=datetime.today())
+if data is not None:
+    min_date = data.index.min().date()
+    max_date = data.index.max().date()
+else:
+    min_date = pd.to_datetime("2024-01-01").date()
+    max_date = datetime.today().date()
 
-# Indicator selection for line chart
-st.sidebar.subheader("📈 Line Chart Options")
+start_date = st.sidebar.date_input("Start date", value=min_date, min_value=min_date, max_value=max_date)
+end_date = st.sidebar.date_input("End date", value=max_date, min_value=min_date, max_value=max_date)
+
+# Indicator selection
+st.sidebar.subheader("📈 Chart Options")
 indicator = st.sidebar.selectbox(
-    "Select indicator to display:",
+    "Select indicator:",
     options=["Adjusted Close Price", "Daily Returns (%)", "Cumulative Return (Base=1)", "Rolling Volatility (30-day)"],
     index=2
 )
 
-# Chart type selection for main view
+# Chart type selection
 chart_type = st.sidebar.selectbox(
     "Select chart type:",
-    options=["Line Chart", "Bar Chart (Latest Values)", "Correlation Heatmap", "Portfolio Pie (Equal Weight)"],
+    options=["Line Chart", "Bar Chart (Latest Values)", "Correlation Heatmap", "Portfolio Pie"],
     index=0
 )
 
@@ -88,10 +81,10 @@ if indicator == "Rolling Volatility (30-day)":
 else:
     window = 30
 
-# Normalize toggle for line chart
+# Normalize toggle
 normalize = st.sidebar.checkbox("Normalize to 100 at start", value=False)
 
-analyze_button = st.sidebar.button("🚀 Fetch Data & Analyze")
+analyze_button = st.sidebar.button("🚀 Analyze")
 
 # ----- Main Logic -----
 if analyze_button:
@@ -99,85 +92,27 @@ if analyze_button:
         st.warning("Please select at least one ticker.")
     else:
         prices = None
-        data_source = ""
         
-        # ---- Data Source 1: Kaggle ----
-        if data_source_option == "Kaggle (S&P 500 2020-2025)" and KAGGLEHUB_AVAILABLE:
-            with st.spinner("Downloading dataset from Kaggle... This may take a moment on the first run."):
-                try:
-                    # Download latest version of the S&P 500 dataset from Kaggle
-                    dataset_path = kagglehub.dataset_download("jockeroika/stock-2025")
-                    st.success(f"✅ Dataset downloaded to: {dataset_path}")
-                    
-                    # Load the CSV file
-                    csv_file = os.path.join(dataset_path, "SP500_2020_2025.csv")
-                    kaggle_df = pd.read_csv(csv_file)
-                    
-                    # Process the dataframe to match our format
-                    kaggle_df['Date'] = pd.to_datetime(kaggle_df['Date'])
-                    kaggle_df.set_index('Date', inplace=True)
-                    
-                    # Filter for selected tickers and date range
-                    mask = (kaggle_df.index >= pd.to_datetime(start_date)) & (kaggle_df.index <= pd.to_datetime(end_date))
-                    # Assuming the dataset uses 'Adj Close' for adjusted close prices
-                    if 'Adj Close' in kaggle_df.columns:
-                        prices = kaggle_df.loc[mask, ['Adj Close']]
-                        prices.columns = ['AAPL'] # Placeholder, this needs proper mapping
-                    else:
-                        st.warning("Kaggle dataset format unexpected. Trying fallback...")
-                        prices = None
-                        
-                    data_source = "Kaggle (S&P 500 2020-2025 dataset)"
-                except Exception as e:
-                    st.warning(f"Could not load Kaggle dataset: {e}. Falling back to local CSV.")
-                    prices = None
-        
-        # ---- Data Source 2: Yahoo Finance ----
-        elif data_source_option == "Yahoo Finance (Live)" and YFINANCE_AVAILABLE:
-            with st.spinner("Attempting to download from Yahoo Finance..."):
-                try:
-                    data = yf.download(tickers, start=start_date, end=end_date, progress=False)
-                    if 'Adj Close' in data.columns:
-                        prices = data['Adj Close']
-                    elif 'Close' in data.columns:
-                        prices = data['Close']
-                    else:
-                        prices = data
-                    
-                    if not prices.empty:
-                        data_source = "Yahoo Finance (live data)"
-                    else:
-                        prices = None
-                except Exception as e:
-                    st.info(f"Yahoo Finance download failed: {e}")
-                    prices = None
-        
-        # ---- Data Source 3: Local CSV (Fallback) ----
-        if prices is None or prices.empty:
-            st.info("⚠️ Switching to local sample data (offline mode).")
-            fallback_df = load_fallback_data()
-            if fallback_df is not None:
-                mask = (fallback_df.index >= pd.to_datetime(start_date)) & (fallback_df.index <= pd.to_datetime(end_date))
-                available_in_fallback = [t for t in tickers if t in fallback_df.columns]
-                if available_in_fallback:
-                    prices = fallback_df.loc[mask, available_in_fallback]
-                else:
-                    prices = pd.DataFrame()
-                data_source = "Local sample data (CSV file)"
+        if data is not None:
+            # Filter by date and selected tickers
+            mask = (data.index >= pd.to_datetime(start_date)) & (data.index <= pd.to_datetime(end_date))
+            available = [t for t in tickers if t in data.columns]
+            if available:
+                prices = data.loc[mask, available]
             else:
-                st.error("Local fallback data file not found. Please ensure 'sample_stock_data.csv' is in the project folder.")
-                prices = None
+                st.error("Selected tickers not found in data.")
+        else:
+            st.error("Data file not loaded.")
         
-        # ---- Process and Display ----
         if prices is not None and not prices.empty:
-            st.success(f"✅ Data loaded successfully from: {data_source}")
+            st.success("✅ Data loaded successfully from local sample file.")
             
             # Calculate returns and volatility
             returns = prices.pct_change().dropna()
             cum_returns = (1 + returns).cumprod()
             rolling_vol = returns.rolling(window=window).std() * np.sqrt(252) * 100
             
-            # Prepare data based on selected indicator
+            # Prepare plot data
             if indicator == "Adjusted Close Price":
                 plot_data = prices
                 y_label = "Price (USD)"
@@ -187,7 +122,7 @@ if analyze_button:
             elif indicator == "Cumulative Return (Base=1)":
                 plot_data = cum_returns
                 y_label = "Cumulative Return"
-            else:  # Rolling Volatility
+            else:
                 plot_data = rolling_vol
                 y_label = f"{window}-Day Rolling Volatility (Annualized %)"
             
@@ -195,7 +130,7 @@ if analyze_button:
                 plot_data = plot_data / plot_data.iloc[0] * 100
                 y_label = "Normalized Value (Base=100)"
             
-            # Render selected chart type
+            # Render chart
             if chart_type == "Line Chart":
                 fig = px.line(
                     plot_data,
@@ -229,7 +164,7 @@ if analyze_button:
                 )
                 st.plotly_chart(fig, use_container_width=True)
             
-            elif chart_type == "Portfolio Pie (Equal Weight)":
+            elif chart_type == "Portfolio Pie":
                 weights = [1/len(tickers)] * len(tickers)
                 fig = px.pie(
                     names=tickers,
@@ -240,9 +175,8 @@ if analyze_button:
                 fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Risk & Return Metrics Table (always show)
-            st.subheader("📋 Risk & Return Summary Statistics")
-            
+            # Risk & Return Metrics Table
+            st.subheader("📋 Risk & Return Summary")
             ann_factor = 252
             metrics_list = []
             for ticker in returns.columns:
@@ -251,11 +185,8 @@ if analyze_button:
                 ann_return = avg_return * ann_factor * 100
                 ann_vol = vol * (ann_factor ** 0.5) * 100
                 sharpe = (avg_return / vol) * (ann_factor ** 0.5) if vol != 0 else 0
-                
-                # Additional metrics
-                total_return = (cum_returns[ticker].iloc[-1] - 1) * 100 if not cum_returns.empty else 0
+                total_return = (cum_returns[ticker].iloc[-1] - 1) * 100
                 max_drawdown = (cum_returns[ticker] / cum_returns[ticker].cummax() - 1).min() * 100
-                
                 metrics_list.append({
                     "Ticker": ticker,
                     "Total Return (%)": round(total_return, 2),
@@ -264,7 +195,6 @@ if analyze_button:
                     "Sharpe Ratio": round(sharpe, 2),
                     "Max Drawdown (%)": round(max_drawdown, 2)
                 })
-            
             metrics_df = pd.DataFrame(metrics_list)
             st.dataframe(
                 metrics_df.style.format({
@@ -278,7 +208,7 @@ if analyze_button:
                 use_container_width=True
             )
             
-            # Additional Stats: Summary Cards
+            # Quick Stats Cards
             st.subheader("📊 Quick Stats")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -298,26 +228,24 @@ if analyze_button:
                 sharpe_val = metrics_df['Sharpe Ratio'].max()
                 st.metric("⚖️ Best Sharpe", highest_sharpe, f"{sharpe_val:.2f}")
             
-            # Raw Data Expander
+            # Raw data expander
             with st.expander("🔍 Show raw price data (last 10 rows)"):
                 st.dataframe(prices.tail(10))
             
-            # Download CSV button
+            # Download button
             csv = prices.to_csv()
             st.download_button(
-                label="📥 Download price data as CSV",
+                label="📥 Download data as CSV",
                 data=csv,
                 file_name=f"stock_data_{start_date}_{end_date}.csv",
                 mime="text/csv"
             )
         else:
-            st.error("No data could be loaded. Please check your network or the local CSV file.")
+            st.error("No data available for the selected date range or tickers.")
 else:
-    st.info("👈 Configure your analysis in the sidebar and click 'Fetch Data & Analyze' to begin.")
-    
-    # Show a preview image or placeholder
+    st.info("👈 Select tickers and date range, then click 'Analyze' to begin.")
     st.markdown("""
-    ### Welcome to the Advanced Stock Analysis Dashboard!
+    ### Welcome to the Stock Analysis Dashboard!
     
     **Features:**
     - 📈 Multiple chart types (Line, Bar, Heatmap, Pie)
@@ -326,10 +254,5 @@ else:
     - 📋 Comprehensive risk/return metrics with color-coded table
     - 📥 Download data capability
     
-    **Data Sources:**
-    - `Kaggle (S&P 500 2020-2025)`: A comprehensive, static dataset of S&P 500 companies from 2020 to 2025.
-    - `Yahoo Finance (Live)`: Fetches the most recent market data in real-time.
-    - `Local CSV (Fallback)`: A minimal dataset to ensure the app runs offline.
-    
-    *Select tickers and date range, then click the button to start.*
+    *Data source: local sample file (`sample_stock_data.csv`).*
     """)
