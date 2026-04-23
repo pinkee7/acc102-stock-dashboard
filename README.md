@@ -25,3 +25,19 @@ This interactive tool helps individual investors and finance students quickly co
 
 ## 5. How to Run Locally
 1. Clone this repository:
+
+
+## 6. Demo Video
+[Insert your Mediasite or YouTube unlisted link here]
+
+## 7. Limitations & Future Work
+- Data is limited to a six-month sample period and eight tickers; real-world applications would require broader historical coverage.
+- The equal-weight portfolio pie chart is illustrative only; future versions could allow custom weighting.
+- Risk-free rate assumed to be zero for Sharpe ratio calculation; could incorporate Treasury yields in future iterations.
+
+---
+
+**Author:** [Your Name]
+**Student ID:** [Your Student ID]
+**Course:** ACC102 - Python Data Product
+**Date:** April 2026
