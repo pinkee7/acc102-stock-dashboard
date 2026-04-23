@@ -30,10 +30,10 @@ of historical performance and risk levels.
 1. Clone the repository
 2. Install dependencies: pip install -r requirements.txt
 3. Run the app: streamlit run app.py
-4. Open http://localhost:8501 in your browser
+4. Open http://localhost:8502 in your browser
 
 ## 6. Product Link / Demo
-(填写你的视频链接)
+(视频链接)
 
 ## 7. Limitations & Next Steps
 - Only historical data, no forward‑looking predictions
