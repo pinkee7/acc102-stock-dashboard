@@ -4,10 +4,11 @@ Stock Risk & Return Dashboard - ACC102 Mini Assignment (Track 4)
 This dashboard compares key risk and return metrics for selected stocks.
 Data is loaded from a local CSV file (sample_stock_data.csv).
 Stock selection is done via a dropdown multiselect, populated from the CSV file.
+All tables are rendered as raw HTML to avoid Pandas Styler compatibility issues.
 
 Author: [Your Name]
 Date: April 2026
-Version: 3.0.0 (Stable – HTML table rendering)
+Version: 4.0.0 (Pure HTML table rendering)
 Project: ACC102 Mini Assignment - Track 4 (Interactive Data Analysis Tool)
 """
 
@@ -38,15 +39,13 @@ st.markdown("---")
 
 @st.cache_data
 def load_sample_data() -> pd.DataFrame:
-    """
-    Load the sample stock price data from the local CSV file.
-    """
+    """Load the sample stock price data from the local CSV file."""
     try:
         df = pd.read_csv("sample_stock_data.csv", index_col=0, parse_dates=True)
         df.columns = [col.upper() for col in df.columns]
         return df
     except FileNotFoundError:
-        st.error("❌ sample_stock_data.csv not found. Please ensure the file is in the same directory as app.py.")
+        st.error("❌ sample_stock_data.csv not found. Place it in the same folder as app.py.")
         st.stop()
     except Exception as e:
         st.error(f"Error loading data: {e}")
@@ -82,47 +81,71 @@ def compute_metrics(adj_close: pd.DataFrame, risk_free_rate: float = 0.02) -> di
     }
 
 
-def convert_summary_table_to_html(summary_df: pd.DataFrame) -> str:
+def build_html_colored_table(df: pd.DataFrame, metric_directions: dict) -> str:
     """
-    Apply conditional color formatting and return an HTML string.
-    Colors: green for good, red for bad, gradient backgrounds.
-    This avoids Streamlit/Pandas Styler compatibility issues.
+    Build a pure HTML table with red-to-green gradient backgrounds.
+    `metric_directions`: keys = column names, values = 'higher_better' or 'lower_better'.
     """
-    # Create a Styler object to generate HTML
-    styler = summary_df.style
+    # Helper: map value to RGBA color using percentile within the column
+    def color_for(value, col_name, min_val, max_val, direction):
+        if pd.isna(value) or max_val == min_val:
+            return "#f0f0f0"  # neutral grey
+        # Normalize to 0-1
+        ratio = (value - min_val) / (max_val - min_val)
+        if direction == 'lower_better':
+            ratio = 1 - ratio  # invert
+        # Red (bad) at 0, Yellow at 0.5, Green (good) at 1
+        if ratio < 0.5:
+            # red to yellow: (255, 0, 0) -> (255, 255, 0)
+            r = 255
+            g = int(255 * (ratio * 2))
+            b = 0
+        else:
+            # yellow to green: (255, 255, 0) -> (0, 255, 0)
+            r = int(255 * (1 - (ratio - 0.5) * 2))
+            g = 255
+            b = 0
+        return f"rgba({r}, {g}, {b}, 0.6)"
 
-    # Higher is better – green gradient
-    high_good = ["Annual Return (%)", "Sharpe Ratio"]
-    existing_high = [col for col in high_good if col in summary_df.columns]
-    if existing_high:
-        styler = styler.background_gradient(subset=existing_high, cmap='RdYlGn', low=0.2, high=0.8)
+    # Format cell values
+    def format_value(col_name, val):
+        if pd.isna(val):
+            return "N/A"
+        if "Return" in col_name or "Volatility" in col_name or "Drawdown" in col_name or "VaR" in col_name:
+            return f"{val:.2f}%"
+        elif "Sharpe" in col_name:
+            return f"{val:.3f}"
+        return f"{val:.4f}"
 
-    # Lower is better – reversed green gradient (red to green)
-    low_good = ["Annual Volatility (%)", "Max Drawdown (%)", "VaR 95%"]
-    existing_low = [col for col in low_good if col in summary_df.columns]
-    if existing_low:
-        styler = styler.background_gradient(subset=existing_low, cmap='RdYlGn_r', low=0.2, high=0.8)
+    # Compute min/max for each column
+    col_mins = {}
+    col_maxs = {}
+    for col in df.columns:
+        col_mins[col] = df[col].min()
+        col_maxs[col] = df[col].max()
 
-    # Format numbers
-    format_dict = {}
-    if "Annual Return (%)" in summary_df.columns:
-        format_dict["Annual Return (%)"] = "{:.2f}%"
-    if "Annual Volatility (%)" in summary_df.columns:
-        format_dict["Annual Volatility (%)"] = "{:.2f}%"
-    if "Sharpe Ratio" in summary_df.columns:
-        format_dict["Sharpe Ratio"] = "{:.3f}"
-    if "Max Drawdown (%)" in summary_df.columns:
-        format_dict["Max Drawdown (%)"] = "{:.2f}%"
-    if "VaR 95%" in summary_df.columns:
-        format_dict["VaR 95%"] = "{:.2f}%"
+    # Build HTML
+    html = '<div style="overflow-x:auto;"><table style="border-collapse:collapse; width:100%;">'
 
-    if format_dict:
-        styler = styler.format(format_dict)
+    # Header
+    html += '<thead><tr><th style="padding:8px; border:1px solid #ddd; background:#f2f2f2;">Ticker</th>'
+    for col in df.columns:
+        html += f'<th style="padding:8px; border:1px solid #ddd; background:#f2f2f2;">{col}</th>'
+    html += '</tr></thead><tbody>'
 
-    # Convert to HTML
-    html = styler.to_html()
-    # Wrap in a div with overflow-x for responsive display
-    html = f'<div style="overflow-x: auto;">{html}</div>'
+    # Rows
+    for ticker in df.index:
+        html += '<tr>'
+        html += f'<td style="padding:8px; border:1px solid #ddd; font-weight:bold;">{ticker}</td>'
+        for col in df.columns:
+            val = df.loc[ticker, col]
+            direction = metric_directions.get(col, 'higher_better')
+            bg_color = color_for(val, col, col_mins[col], col_maxs[col], direction)
+            formatted = format_value(col, val)
+            html += f'<td style="padding:8px; border:1px solid #ddd; background:{bg_color};">{formatted}</td>'
+        html += '</tr>'
+
+    html += '</tbody></table></div>'
     return html
 
 
@@ -137,9 +160,7 @@ def create_cumulative_returns_chart(cumulative_returns: pd.DataFrame) -> go.Figu
             mode='lines',
             line=dict(width=2.5)
         ))
-
     fig.add_hline(y=1, line_dash='dot', line_color='gray', opacity=0.5)
-
     fig.update_layout(
         title=dict(text="Cumulative Returns (Rebased to 1)", font=dict(size=18)),
         xaxis_title="Date",
@@ -154,43 +175,23 @@ def create_cumulative_returns_chart(cumulative_returns: pd.DataFrame) -> go.Figu
     return fig
 
 
-def create_scatter_plot(annual_returns: pd.Series, annual_vol: pd.Series, sharpe: pd.Series) -> go.Figure:
+def create_scatter_plot(annual_returns, annual_vol, sharpe) -> go.Figure:
     """Risk-return bubble chart."""
-    returns_pct = annual_returns.values
-    vols_pct = annual_vol.values
-    sharpe_vals = sharpe.values
-    tickers = annual_returns.index.tolist()
-
-    sizes = np.maximum(sharpe_vals + 2.5, 5)
-
+    sizes = np.maximum(sharpe.values + 2.5, 5)
     fig = px.scatter(
-        x=vols_pct,
-        y=returns_pct,
-        text=tickers,
+        x=annual_vol.values,
+        y=annual_returns.values,
+        text=annual_returns.index,
         size=sizes,
         size_max=25,
-        color=sharpe_vals,
+        color=sharpe.values,
         color_continuous_scale='RdYlGn',
-        labels={
-            'x': 'Annualized Volatility (%)',
-            'y': 'Annualized Return (%)',
-            'color': 'Sharpe Ratio'
-        },
+        labels={'x': 'Annualized Volatility (%)', 'y': 'Annualized Return (%)', 'color': 'Sharpe Ratio'},
         title="Risk vs. Return (Bubble Size = Sharpe Ratio)"
     )
-
-    fig.update_traces(
-        textposition='top center',
-        marker=dict(line=dict(width=1, color='DarkSlateGrey'))
-    )
-
-    fig.update_layout(
-        height=500,
-        xaxis_title="Annualized Volatility (%) (Risk)",
-        yaxis_title="Annualized Return (%)",
-        hovermode='closest',
-        margin=dict(l=20, r=20, t=50, b=20)
-    )
+    fig.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='DarkSlateGrey')))
+    fig.update_layout(height=500, xaxis_title="Annualized Volatility (%) (Risk)", yaxis_title="Annualized Return (%)",
+                      hovermode='closest', margin=dict(l=20, r=20, t=50, b=20))
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     return fig
@@ -212,8 +213,7 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
     normalized_df = pd.DataFrame(index=tickers)
     for name, info in metric_vars.items():
         values = info['series'].fillna(0)
-        min_val = values.min()
-        max_val = values.max()
+        min_val, max_val = values.min(), values.max()
         if max_val == min_val:
             normalized = pd.Series(50, index=values.index)
         else:
@@ -238,17 +238,10 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
             fill='toself',
             line=dict(color=colors[i % len(colors)], width=2)
         ))
-
     fig.update_layout(
         title=dict(text="Radar Chart — Normalized Metric Comparison", font=dict(size=18)),
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 100],
-                tickvals=[0, 25, 50, 75, 100],
-                ticktext=['0', '25', '50', '75', '100']
-            )
-        ),
+        polar=dict(radialaxis=dict(visible=True, range=[0, 100], tickvals=[0, 25, 50, 75, 100],
+                                ticktext=['0', '25', '50', '75', '100'])),
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         height=550,
@@ -260,19 +253,9 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
 def create_correlation_heatmap(daily_returns: pd.DataFrame) -> go.Figure:
     """Correlation matrix heatmap."""
     corr_matrix = daily_returns.corr().round(3)
-    fig = px.imshow(
-        corr_matrix,
-        text_auto=True,
-        color_continuous_scale='RdBu_r',
-        zmin=-1,
-        zmax=1,
-        aspect="auto"
-    )
-    fig.update_layout(
-        title=dict(text="Return Correlation Matrix", font=dict(size=16)),
-        height=500,
-        margin=dict(l=20, r=20, t=50, b=20)
-    )
+    fig = px.imshow(corr_matrix, text_auto=True, color_continuous_scale='RdBu_r', zmin=-1, zmax=1, aspect="auto")
+    fig.update_layout(title=dict(text="Return Correlation Matrix", font=dict(size=16)),
+                      height=500, margin=dict(l=20, r=20, t=50, b=20))
     return fig
 
 
@@ -281,56 +264,36 @@ def create_returns_histogram(daily_returns: pd.DataFrame, selected_ticker: str) 
     returns_series = daily_returns[selected_ticker].dropna()
     if returns_series.empty:
         return None
-
-    fig = px.histogram(
-        returns_series,
-        nbins=50,
-        title=f"Daily Return Distribution — {selected_ticker}",
-        labels={'value': 'Daily Return', 'count': 'Frequency'},
-        opacity=0.7,
-        color_discrete_sequence=['#1f77b4']
-    )
-
-    mean = returns_series.mean()
-    std = returns_series.std()
+    fig = px.histogram(returns_series, nbins=50,
+                       title=f"Daily Return Distribution — {selected_ticker}",
+                       labels={'value': 'Daily Return', 'count': 'Frequency'},
+                       opacity=0.7, color_discrete_sequence=['#1f77b4'])
+    mean, std = returns_series.mean(), returns_series.std()
     x = np.linspace(mean - 3.5*std, mean + 3.5*std, 100)
     y = np.exp(-0.5 * ((x - mean)/std)**2) / (std * np.sqrt(2*np.pi))
     bin_width = (returns_series.max() - returns_series.min()) / 50
     y_scaled = y * len(returns_series) * bin_width
-
-    fig.add_trace(go.Scatter(
-        x=x, y=y_scaled,
-        mode='lines',
-        name='Normal Reference',
-        line=dict(color='red', width=2, dash='dash')
-    ))
-
-    fig.update_layout(
-        height=500,
-        showlegend=True,
-        yaxis_title="Frequency",
-        xaxis_title="Daily Return",
-        margin=dict(l=20, r=20, t=50, b=20)
-    )
+    fig.add_trace(go.Scatter(x=x, y=y_scaled, mode='lines', name='Normal Reference',
+                             line=dict(color='red', width=2, dash='dash')))
+    fig.update_layout(height=500, showlegend=True, yaxis_title="Frequency", xaxis_title="Daily Return",
+                      margin=dict(l=20, r=20, t=50, b=20))
     return fig
 
 
 # -----------------------------------------------------------------------------
 # SIDEBAR CONFIGURATION
 # -----------------------------------------------------------------------------
-
 st.sidebar.header("⚙️ Configuration")
 
-# Load data early to get column names for the multiselect
+# Load data early to get column names for multiselect
 raw_data = load_sample_data()
 all_tickers = raw_data.columns.tolist()
 
-# ---- Stock Selection ----
 st.sidebar.subheader("📈 Stock Selection")
 selected_tickers = st.sidebar.multiselect(
     "Choose stocks to compare:",
     options=all_tickers,
-    default=all_tickers  # Default select all stocks
+    default=all_tickers
 )
 
 if not selected_tickers:
@@ -338,7 +301,6 @@ if not selected_tickers:
 else:
     st.sidebar.info(f"Selected: {', '.join(selected_tickers)}")
 
-# ---- Date Range Selection ----
 st.sidebar.subheader("📅 Date Range")
 default_start = datetime(2023, 1, 1)
 default_end = datetime(2025, 12, 31)
@@ -347,7 +309,6 @@ end_date = st.sidebar.date_input("End Date", value=default_end)
 if start_date >= end_date:
     st.sidebar.error("Start date must be before end date.")
 
-# ---- Indicator Selection ----
 st.sidebar.subheader("📋 Indicators")
 indicator_options = [
     "Annual Return (%)",
@@ -359,10 +320,9 @@ indicator_options = [
 selected_indicators = st.sidebar.multiselect(
     "Select indicators to display:",
     options=indicator_options,
-    default=indicator_options  # Default select all indicators
+    default=indicator_options
 )
 
-# ---- Chart Visibility ----
 st.sidebar.subheader("📊 Chart Visibility")
 show_line_chart = st.sidebar.checkbox("Cumulative Returns Line Chart", value=True)
 show_table = st.sidebar.checkbox("Risk & Return Summary Table", value=True)
@@ -371,50 +331,37 @@ show_radar = st.sidebar.checkbox("Radar Chart", value=True)
 show_histogram = st.sidebar.checkbox("Daily Return Histogram", value=True)
 show_heatmap = st.sidebar.checkbox("Correlation Heatmap", value=True)
 
-# ---- Risk-Free Rate ----
 st.sidebar.subheader("📈 Parameters")
-risk_free_rate_pct = st.sidebar.slider(
-    "Risk-Free Rate (%)",
-    min_value=0.0,
-    max_value=10.0,
-    value=2.0,
-    step=0.5
-)
+risk_free_rate_pct = st.sidebar.slider("Risk-Free Rate (%)", 0.0, 10.0, 2.0, 0.5)
 risk_free_rate = risk_free_rate_pct / 100
 
-# ---- Run Button ----
 run_analysis = st.sidebar.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
 
 # -----------------------------------------------------------------------------
 # MAIN CONTENT AREA
 # -----------------------------------------------------------------------------
-
 if run_analysis and selected_tickers:
-    # Filter data by date range and tickers
-    adj_close = raw_data.loc[
-        (raw_data.index >= pd.Timestamp(start_date)) &
-        (raw_data.index <= pd.Timestamp(end_date)),
-        selected_tickers
-    ].copy()
+    # Filter data
+    adj_close = raw_data.loc[(raw_data.index >= pd.Timestamp(start_date)) &
+                             (raw_data.index <= pd.Timestamp(end_date)), selected_tickers].copy()
 
     if adj_close.empty:
         st.error("No data available for the selected date range.")
         st.stop()
 
-    # Compute metrics
     with st.spinner("⏳ Computing risk and return metrics..."):
-        metrics_data = compute_metrics(adj_close, risk_free_rate)
+        metrics = compute_metrics(adj_close, risk_free_rate)
 
-    daily_returns = metrics_data['daily_returns']
-    annual_return = metrics_data['annual_return'] * 100
-    annual_volatility = metrics_data['annual_volatility'] * 100
-    sharpe_ratio = metrics_data['sharpe_ratio']
-    max_drawdown = metrics_data['max_drawdown'] * 100
-    var_95 = metrics_data['var_95'] * 100
-    cumulative_returns = metrics_data['cumulative_returns']
+    daily_returns = metrics['daily_returns']
+    annual_return = metrics['annual_return'] * 100
+    annual_volatility = metrics['annual_volatility'] * 100
+    sharpe_ratio = metrics['sharpe_ratio']
+    max_drawdown = metrics['max_drawdown'] * 100
+    var_95 = metrics['var_95'] * 100
+    cumulative_returns = metrics['cumulative_returns']
 
-    # Build Summary Table
+    # Build summary DataFrame (only selected indicators)
     indicator_map = {
         "Annual Return (%)": annual_return,
         "Annual Volatility (%)": annual_volatility,
@@ -422,83 +369,69 @@ if run_analysis and selected_tickers:
         "Max Drawdown (%)": max_drawdown,
         "VaR 95%": var_95
     }
-    summary_data = {ind: indicator_map[ind] for ind in selected_indicators}
-    if summary_data:
-        summary_df = pd.DataFrame(summary_data).round(4)
-        if "Annual Return (%)" in summary_df.columns:
-            summary_df = summary_df.sort_values("Annual Return (%)", ascending=False)
-    else:
-        summary_df = None
+    summary_data = {k: indicator_map[k] for k in selected_indicators}
+    summary_df = pd.DataFrame(summary_data, index=annual_return.index)
+    if "Annual Return (%)" in summary_df.columns:
+        summary_df = summary_df.sort_values("Annual Return (%)", ascending=False)
 
-    # =========================================================================
+    # Directions for coloring
+    metric_directions = {
+        "Annual Return (%)": "higher_better",
+        "Sharpe Ratio": "higher_better",
+        "Annual Volatility (%)": "lower_better",
+        "Max Drawdown (%)": "lower_better",
+        "VaR 95%": "lower_better"
+    }
+
+    # ==========================
     # DISPLAY CHARTS
-    # =========================================================================
+    # ==========================
     st.markdown("## 📊 Analysis Results")
 
-    # 1. Line chart
     if show_line_chart:
         with st.container():
             st.markdown("### 📈 Cumulative Returns")
-            fig_line = create_cumulative_returns_chart(cumulative_returns)
-            st.plotly_chart(fig_line, use_container_width=True)
+            st.plotly_chart(create_cumulative_returns_chart(cumulative_returns), use_container_width=True)
             st.markdown("---")
 
-    # 2. Summary table (rendered as HTML to avoid Styler errors)
-    if show_table and summary_df is not None:
+    if show_table and not summary_df.empty:
         with st.container():
             st.markdown("### 📋 Risk & Return Summary")
-            html_table = convert_summary_table_to_html(summary_df)
+            html_table = build_html_colored_table(summary_df, metric_directions)
             st.markdown(html_table, unsafe_allow_html=True)
             st.markdown("---")
 
-    # 3. Scatter plot
     if show_scatter and len(selected_tickers) >= 1:
         with st.container():
             st.markdown("### 🫧 Risk-Return Scatter Plot")
-            fig_scatter = create_scatter_plot(annual_return, annual_volatility, sharpe_ratio)
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.plotly_chart(create_scatter_plot(annual_return, annual_volatility, sharpe_ratio), use_container_width=True)
             st.markdown("*Each point represents a stock. Bubble size reflects the Sharpe Ratio.*")
             st.markdown("---")
 
-    # 4. Radar chart
     if show_radar and len(selected_tickers) >= 1:
         with st.container():
             st.markdown("### 🕸️ Radar Chart — Metric Comparison")
-            fig_radar = create_radar_chart(adj_close)
-            st.plotly_chart(fig_radar, use_container_width=True)
-            st.markdown("*Radar chart values are normalized to 0–100. Higher is better; for volatility, drawdown, and VaR, the scale is inverted.*")
+            st.plotly_chart(create_radar_chart(adj_close), use_container_width=True)
+            st.markdown("*Radar values normalized to 0–100. Higher is better; for volatility, drawdown, and VaR the scale is inverted.*")
             st.markdown("---")
 
-    # 5. Side‑by‑side: Histogram + Correlation Heatmap
     if show_histogram or show_heatmap:
         col_left, col_right = st.columns(2, gap="medium")
-
         with col_left:
             if show_histogram and len(selected_tickers) >= 1:
                 st.markdown("### 📊 Daily Return Distribution")
-                selected_ticker_hist = st.selectbox(
-                    "Select ticker for histogram:",
-                    options=selected_tickers,
-                    key="hist_ticker"
-                )
-                fig_hist = create_returns_histogram(daily_returns, selected_ticker_hist)
+                sel_ticker = st.selectbox("Select ticker for histogram:", options=selected_tickers, key="hist")
+                fig_hist = create_returns_histogram(daily_returns, sel_ticker)
                 if fig_hist:
                     st.plotly_chart(fig_hist, use_container_width=True)
-            else:
-                st.empty()
-
         with col_right:
             if show_heatmap and len(selected_tickers) >= 2:
                 st.markdown("### 🔥 Correlation Heatmap")
-                fig_heatmap = create_correlation_heatmap(daily_returns)
-                st.plotly_chart(fig_heatmap, use_container_width=True)
+                st.plotly_chart(create_correlation_heatmap(daily_returns), use_container_width=True)
                 st.markdown("*A value of 1 means perfect positive correlation; -1 means perfect negative correlation.*")
-            else:
-                st.empty()
 
-    # Fallback if all toggles are off
     if not any([show_line_chart, show_table, show_scatter, show_radar, show_histogram, show_heatmap]):
-        st.info("All charts are currently hidden. Please tick the checkboxes in the sidebar to display them.")
+        st.info("All charts are currently hidden. Tick the boxes in the sidebar to display them.")
 
 elif run_analysis and not selected_tickers:
     st.warning("Please select at least one stock from the sidebar.")
@@ -509,15 +442,13 @@ else:
 
     1. **Select stocks** from the dropdown (populated from your CSV file).
     2. **Set the date range** for analysis.
-    3. **Choose which indicators** to display in the summary table.
+    3. **Choose indicators** to display in the summary table.
     4. **Toggle charts** on/off as needed.
     5. Click **Run Analysis** to generate the dashboard.
 
-    The app computes the following metrics for each selected stock:
-    - Annualized return and volatility
-    - Sharpe ratio (risk-adjusted return)
+    The app computes:
+    - Annualized return & volatility
+    - Sharpe ratio
     - Maximum drawdown
     - Value at Risk (95%)
-
-    **Data source**: The dashboard uses the local file `sample_stock_data.csv`.
     """)
