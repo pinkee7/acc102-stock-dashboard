@@ -20,11 +20,12 @@ of historical performance and risk levels.
 
 ## 4. Key Findings
 
-- **TSLA** delivered the highest annualised return over the period but also exhibited the highest volatility and the deepest maximum drawdown, representing a classic high‑risk/high‑reward profile.
-- **MSFT** and **GOOGL** achieved the highest Sharpe ratios, meaning they offered the best risk‑adjusted returns among the selected stocks.
-- **JPM** showed the lowest correlation with the technology stocks (TSLA, AAPL, MSFT, GOOGL, AMZN), highlighting its potential diversification benefit in a multi‑sector portfolio.
-- **AAPL** demonstrated the smallest maximum drawdown among the tech names, suggesting relatively better downside resilience.
-- According to the 95% Value‑at‑Risk, **TSLA** had the largest expected daily loss, while **JPM** had the smallest, reflecting differences in inherent business risk.
+- **NVDA** delivered the highest cumulative return by a wide margin, driven by the AI boom, but its volatility and maximum drawdown were also among the highest — a classic high-risk/high-reward profile.
+- **TSLA** also achieved strong returns, though with significantly higher volatility, reflecting the speculative nature of the EV sector.
+- **MSFT** and **GOOGL** offered a better balance between return and risk, resulting in the highest Sharpe ratios among the selected stocks.
+- **UNH**, as the only healthcare stock, showed the lowest volatility and most stable growth, demonstrating the diversification benefit of including non-tech sectors.
+- **JPM** (financials) exhibited moderate returns and volatility, with relatively low correlations to the tech-heavy tickers — useful for portfolio diversification.
+- The correlation heatmap confirmed that most tech stocks were highly correlated with each other, while UNH and JPM offered lower correlations.
 
 ## 5. How to Run
 1. Clone the repository
