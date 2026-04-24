@@ -7,7 +7,7 @@ Stock selection is done via a dropdown multiselect, populated from the CSV file.
 
 Author: [Your Name]
 Date: April 2026
-Version: 2.2.0
+Version: 3.0.0 (Stable – HTML table rendering)
 Project: ACC102 Mini Assignment - Track 4 (Interactive Data Analysis Tool)
 """
 
@@ -54,18 +54,7 @@ def load_sample_data() -> pd.DataFrame:
 
 
 def compute_metrics(adj_close: pd.DataFrame, risk_free_rate: float = 0.02) -> dict:
-    """
-    Compute risk and return metrics for each stock.
-
-    Returns a dictionary containing:
-        - daily_returns
-        - annual_return (as decimal)
-        - annual_volatility (as decimal)
-        - sharpe_ratio
-        - max_drawdown (as decimal)
-        - var_95 (as decimal)
-        - cumulative_returns (rebased to 1)
-    """
+    """Compute risk and return metrics for each stock."""
     daily_returns = adj_close.pct_change().dropna(how='all')
     trading_days = len(adj_close)
 
@@ -93,44 +82,48 @@ def compute_metrics(adj_close: pd.DataFrame, risk_free_rate: float = 0.02) -> di
     }
 
 
-def style_summary_table(df: pd.DataFrame):
+def convert_summary_table_to_html(summary_df: pd.DataFrame) -> str:
     """
-    Apply conditional gradient formatting only to columns that actually exist.
+    Apply conditional color formatting and return an HTML string.
+    Colors: green for good, red for bad, gradient backgrounds.
+    This avoids Streamlit/Pandas Styler compatibility issues.
     """
-    styled = df.style
+    # Create a Styler object to generate HTML
+    styler = summary_df.style
 
-    def safe_background_gradient(styler, columns, cmap, low=0.2, high=0.8, reverse=False):
-        existing_cols = [col for col in columns if col in df.columns]
-        if existing_cols:
-            cmap_actual = cmap + '_r' if reverse else cmap
-            return styler.background_gradient(subset=existing_cols, cmap=cmap_actual, low=low, high=high)
-        return styler
+    # Higher is better – green gradient
+    high_good = ["Annual Return (%)", "Sharpe Ratio"]
+    existing_high = [col for col in high_good if col in summary_df.columns]
+    if existing_high:
+        styler = styler.background_gradient(subset=existing_high, cmap='RdYlGn', low=0.2, high=0.8)
 
-    # Higher is better
-    high_good_cols = ["Annual Return (%)", "Sharpe Ratio"]
-    styled = safe_background_gradient(styled, high_good_cols, cmap='RdYlGn', low=0.2, high=0.8)
+    # Lower is better – reversed green gradient (red to green)
+    low_good = ["Annual Volatility (%)", "Max Drawdown (%)", "VaR 95%"]
+    existing_low = [col for col in low_good if col in summary_df.columns]
+    if existing_low:
+        styler = styler.background_gradient(subset=existing_low, cmap='RdYlGn_r', low=0.2, high=0.8)
 
-    # Lower is better
-    low_good_cols = ["Annual Volatility (%)", "Max Drawdown (%)", "VaR 95%"]
-    styled = safe_background_gradient(styled, low_good_cols, cmap='RdYlGn', low=0.2, high=0.8, reverse=True)
-
-    # Formatting
+    # Format numbers
     format_dict = {}
-    if "Annual Return (%)" in df.columns:
+    if "Annual Return (%)" in summary_df.columns:
         format_dict["Annual Return (%)"] = "{:.2f}%"
-    if "Annual Volatility (%)" in df.columns:
+    if "Annual Volatility (%)" in summary_df.columns:
         format_dict["Annual Volatility (%)"] = "{:.2f}%"
-    if "Sharpe Ratio" in df.columns:
+    if "Sharpe Ratio" in summary_df.columns:
         format_dict["Sharpe Ratio"] = "{:.3f}"
-    if "Max Drawdown (%)" in df.columns:
+    if "Max Drawdown (%)" in summary_df.columns:
         format_dict["Max Drawdown (%)"] = "{:.2f}%"
-    if "VaR 95%" in df.columns:
+    if "VaR 95%" in summary_df.columns:
         format_dict["VaR 95%"] = "{:.2f}%"
 
     if format_dict:
-        styled = styled.format(format_dict)
+        styler = styler.format(format_dict)
 
-    return styled
+    # Convert to HTML
+    html = styler.to_html()
+    # Wrap in a div with overflow-x for responsive display
+    html = f'<div style="overflow-x: auto;">{html}</div>'
+    return html
 
 
 def create_cumulative_returns_chart(cumulative_returns: pd.DataFrame) -> go.Figure:
@@ -168,7 +161,6 @@ def create_scatter_plot(annual_returns: pd.Series, annual_vol: pd.Series, sharpe
     sharpe_vals = sharpe.values
     tickers = annual_returns.index.tolist()
 
-    # Ensure bubble sizes are positive
     sizes = np.maximum(sharpe_vals + 2.5, 5)
 
     fig = px.scatter(
@@ -329,16 +321,16 @@ def create_returns_histogram(daily_returns: pd.DataFrame, selected_ticker: str) 
 
 st.sidebar.header("⚙️ Configuration")
 
-# ---- Stock Selection (Multiselect from CSV columns) ----
 # Load data early to get column names for the multiselect
 raw_data = load_sample_data()
 all_tickers = raw_data.columns.tolist()
 
+# ---- Stock Selection ----
 st.sidebar.subheader("📈 Stock Selection")
 selected_tickers = st.sidebar.multiselect(
     "Choose stocks to compare:",
     options=all_tickers,
-    default=all_tickers  # 默认全选所有股票
+    default=all_tickers  # Default select all stocks
 )
 
 if not selected_tickers:
@@ -346,7 +338,7 @@ if not selected_tickers:
 else:
     st.sidebar.info(f"Selected: {', '.join(selected_tickers)}")
 
-# ---- Date Range Selection --------------------------------------------------
+# ---- Date Range Selection ----
 st.sidebar.subheader("📅 Date Range")
 default_start = datetime(2023, 1, 1)
 default_end = datetime(2025, 12, 31)
@@ -355,7 +347,7 @@ end_date = st.sidebar.date_input("End Date", value=default_end)
 if start_date >= end_date:
     st.sidebar.error("Start date must be before end date.")
 
-# ---- Indicator Selection (for Summary Table) -------------------------------
+# ---- Indicator Selection ----
 st.sidebar.subheader("📋 Indicators")
 indicator_options = [
     "Annual Return (%)",
@@ -367,10 +359,10 @@ indicator_options = [
 selected_indicators = st.sidebar.multiselect(
     "Select indicators to display:",
     options=indicator_options,
-    default=indicator_options  # 默认全选所有指标
+    default=indicator_options  # Default select all indicators
 )
 
-# ---- Chart Type Selection --------------------------------------------------
+# ---- Chart Visibility ----
 st.sidebar.subheader("📊 Chart Visibility")
 show_line_chart = st.sidebar.checkbox("Cumulative Returns Line Chart", value=True)
 show_table = st.sidebar.checkbox("Risk & Return Summary Table", value=True)
@@ -379,7 +371,7 @@ show_radar = st.sidebar.checkbox("Radar Chart", value=True)
 show_histogram = st.sidebar.checkbox("Daily Return Histogram", value=True)
 show_heatmap = st.sidebar.checkbox("Correlation Heatmap", value=True)
 
-# ---- Risk-Free Rate Adjustment ---------------------------------------------
+# ---- Risk-Free Rate ----
 st.sidebar.subheader("📈 Parameters")
 risk_free_rate_pct = st.sidebar.slider(
     "Risk-Free Rate (%)",
@@ -390,7 +382,7 @@ risk_free_rate_pct = st.sidebar.slider(
 )
 risk_free_rate = risk_free_rate_pct / 100
 
-# ---- Run Button ------------------------------------------------------------
+# ---- Run Button ----
 run_analysis = st.sidebar.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
 
@@ -399,7 +391,7 @@ run_analysis = st.sidebar.button("🚀 Run Analysis", type="primary", use_contai
 # -----------------------------------------------------------------------------
 
 if run_analysis and selected_tickers:
-    # Filter data by date range and selected tickers
+    # Filter data by date range and tickers
     adj_close = raw_data.loc[
         (raw_data.index >= pd.Timestamp(start_date)) &
         (raw_data.index <= pd.Timestamp(end_date)),
@@ -451,12 +443,12 @@ if run_analysis and selected_tickers:
             st.plotly_chart(fig_line, use_container_width=True)
             st.markdown("---")
 
-    # 2. Summary table with colors
+    # 2. Summary table (rendered as HTML to avoid Styler errors)
     if show_table and summary_df is not None:
         with st.container():
             st.markdown("### 📋 Risk & Return Summary")
-            styled_table = style_summary_table(summary_df)
-            st.dataframe(styled_table, use_container_width=True)
+            html_table = convert_summary_table_to_html(summary_df)
+            st.markdown(html_table, unsafe_allow_html=True)
             st.markdown("---")
 
     # 3. Scatter plot
