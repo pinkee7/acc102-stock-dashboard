@@ -3,10 +3,11 @@ Stock Risk & Return Dashboard - ACC102 Mini Assignment (Track 4)
 
 This dashboard compares key risk and return metrics for selected stocks.
 Data is loaded from a local CSV file (sample_stock_data.csv).
+Stock selection is done via a dropdown multiselect, populated from the CSV file.
 
 Author: [Your Name]
 Date: April 2026
-Version: 2.0.0
+Version: 2.2.0
 Project: ACC102 Mini Assignment - Track 4 (Interactive Data Analysis Tool)
 """
 
@@ -17,7 +18,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 
-# Configure the Streamlit page
+# -----------------------------------------------------------------------------
+# PAGE CONFIGURATION
+# -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Stock Risk & Return Dashboard",
     layout="wide",
@@ -28,9 +31,10 @@ st.title("📊 Stock Risk & Return Dashboard")
 st.markdown("Compare the risk and return characteristics of selected stocks.")
 st.markdown("---")
 
-# =============================================================================
+
+# -----------------------------------------------------------------------------
 # HELPER FUNCTIONS
-# =============================================================================
+# -----------------------------------------------------------------------------
 
 @st.cache_data
 def load_sample_data() -> pd.DataFrame:
@@ -52,6 +56,15 @@ def load_sample_data() -> pd.DataFrame:
 def compute_metrics(adj_close: pd.DataFrame, risk_free_rate: float = 0.02) -> dict:
     """
     Compute risk and return metrics for each stock.
+
+    Returns a dictionary containing:
+        - daily_returns
+        - annual_return (as decimal)
+        - annual_volatility (as decimal)
+        - sharpe_ratio
+        - max_drawdown (as decimal)
+        - var_95 (as decimal)
+        - cumulative_returns (rebased to 1)
     """
     daily_returns = adj_close.pct_change().dropna(how='all')
     trading_days = len(adj_close)
@@ -93,12 +106,15 @@ def style_summary_table(df: pd.DataFrame):
             return styler.background_gradient(subset=existing_cols, cmap=cmap_actual, low=low, high=high)
         return styler
 
+    # Higher is better
     high_good_cols = ["Annual Return (%)", "Sharpe Ratio"]
     styled = safe_background_gradient(styled, high_good_cols, cmap='RdYlGn', low=0.2, high=0.8)
 
+    # Lower is better
     low_good_cols = ["Annual Volatility (%)", "Max Drawdown (%)", "VaR 95%"]
     styled = safe_background_gradient(styled, low_good_cols, cmap='RdYlGn', low=0.2, high=0.8, reverse=True)
 
+    # Formatting
     format_dict = {}
     if "Annual Return (%)" in df.columns:
         format_dict["Annual Return (%)"] = "{:.2f}%"
@@ -118,9 +134,7 @@ def style_summary_table(df: pd.DataFrame):
 
 
 def create_cumulative_returns_chart(cumulative_returns: pd.DataFrame) -> go.Figure:
-    """
-    Create a line chart showing cumulative returns over time.
-    """
+    """Line chart of cumulative returns over time."""
     fig = go.Figure()
     for ticker in cumulative_returns.columns:
         fig.add_trace(go.Scatter(
@@ -148,19 +162,14 @@ def create_cumulative_returns_chart(cumulative_returns: pd.DataFrame) -> go.Figu
 
 
 def create_scatter_plot(annual_returns: pd.Series, annual_vol: pd.Series, sharpe: pd.Series) -> go.Figure:
-    """
-    Create a risk-return scatter plot (bubble chart).
-    X-axis: Annual Volatility (risk), Y-axis: Annual Return, Bubble size: Sharpe Ratio.
-    """
-    # Convert to percent for display
+    """Risk-return bubble chart."""
     returns_pct = annual_returns.values
     vols_pct = annual_vol.values
     sharpe_vals = sharpe.values
     tickers = annual_returns.index.tolist()
 
-    # Scale bubble size (Sharpe can be negative, so shift to positive or use absolute)
-    # Use a min size for better visibility
-    sizes = np.maximum(sharpe_vals + 2.5, 5)  # ensure positive size, scaled
+    # Ensure bubble sizes are positive
+    sizes = np.maximum(sharpe_vals + 2.5, 5)
 
     fig = px.scatter(
         x=vols_pct,
@@ -192,14 +201,11 @@ def create_scatter_plot(annual_returns: pd.Series, annual_vol: pd.Series, sharpe
     )
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-
     return fig
 
 
 def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
-    """
-    Create an interactive radar (spider) chart comparing multiple metrics.
-    """
+    """Spider chart comparing normalized metrics."""
     metrics = compute_metrics(adj_close)
     tickers = adj_close.columns.tolist()
 
@@ -216,7 +222,6 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
         values = info['series'].fillna(0)
         min_val = values.min()
         max_val = values.max()
-
         if max_val == min_val:
             normalized = pd.Series(50, index=values.index)
         else:
@@ -224,7 +229,6 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
                 normalized = (values - min_val) / (max_val - min_val) * 100
             else:
                 normalized = (max_val - values) / (max_val - min_val) * 100
-
         normalized_df[name] = normalized
 
     categories = list(metric_vars.keys())
@@ -235,7 +239,6 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
     for i, ticker in enumerate(tickers):
         values = normalized_df.loc[ticker].tolist()
         values_closed = values + [values[0]]
-
         fig.add_trace(go.Scatterpolar(
             r=values_closed,
             theta=categories_closed,
@@ -263,11 +266,8 @@ def create_radar_chart(adj_close: pd.DataFrame) -> go.Figure:
 
 
 def create_correlation_heatmap(daily_returns: pd.DataFrame) -> go.Figure:
-    """
-    Create a correlation heatmap for stock returns.
-    """
+    """Correlation matrix heatmap."""
     corr_matrix = daily_returns.corr().round(3)
-
     fig = px.imshow(
         corr_matrix,
         text_auto=True,
@@ -276,7 +276,6 @@ def create_correlation_heatmap(daily_returns: pd.DataFrame) -> go.Figure:
         zmax=1,
         aspect="auto"
     )
-
     fig.update_layout(
         title=dict(text="Return Correlation Matrix", font=dict(size=16)),
         height=500,
@@ -285,11 +284,8 @@ def create_correlation_heatmap(daily_returns: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def create_returns_histogram(daily_returns: pd.DataFrame,
-                             selected_ticker: str) -> go.Figure:
-    """
-    Create a histogram of daily returns for a selected stock.
-    """
+def create_returns_histogram(daily_returns: pd.DataFrame, selected_ticker: str) -> go.Figure:
+    """Histogram of daily returns with normal curve overlay."""
     returns_series = daily_returns[selected_ticker].dropna()
     if returns_series.empty:
         return None
@@ -311,8 +307,7 @@ def create_returns_histogram(daily_returns: pd.DataFrame,
     y_scaled = y * len(returns_series) * bin_width
 
     fig.add_trace(go.Scatter(
-        x=x,
-        y=y_scaled,
+        x=x, y=y_scaled,
         mode='lines',
         name='Normal Reference',
         line=dict(color='red', width=2, dash='dash')
@@ -328,28 +323,33 @@ def create_returns_histogram(daily_returns: pd.DataFrame,
     return fig
 
 
-# =============================================================================
-# SIDEBAR CONFIGURATION (Left Panel)
-# =============================================================================
+# -----------------------------------------------------------------------------
+# SIDEBAR CONFIGURATION
+# -----------------------------------------------------------------------------
 
 st.sidebar.header("⚙️ Configuration")
 
-# ---- Stock Ticker Selection ------------------------------------------------
+# ---- Stock Selection (Multiselect from CSV columns) ----
+# Load data early to get column names for the multiselect
+raw_data = load_sample_data()
+all_tickers = raw_data.columns.tolist()
+
 st.sidebar.subheader("📈 Stock Selection")
-default_tickers = "AAPL, MSFT, GOOGL, AMZN, TSLA, JPM"
-ticker_input = st.sidebar.text_input(
-    "Stock Tickers (comma-separated)",
-    value=default_tickers,
-    help="Example: AAPL, MSFT, GOOGL"
+selected_tickers = st.sidebar.multiselect(
+    "Choose stocks to compare:",
+    options=all_tickers,
+    default=all_tickers  # 默认全选所有股票
 )
-tickers = [t.strip().upper() for t in ticker_input.split(',') if t.strip()]
-if tickers:
-    st.sidebar.info(f"Selected: {', '.join(tickers)}")
+
+if not selected_tickers:
+    st.sidebar.warning("Please select at least one stock.")
+else:
+    st.sidebar.info(f"Selected: {', '.join(selected_tickers)}")
 
 # ---- Date Range Selection --------------------------------------------------
 st.sidebar.subheader("📅 Date Range")
-default_start = datetime(2020, 1, 1)
-default_end = datetime(2024, 12, 31)
+default_start = datetime(2023, 1, 1)
+default_end = datetime(2025, 12, 31)
 start_date = st.sidebar.date_input("Start Date", value=default_start)
 end_date = st.sidebar.date_input("End Date", value=default_end)
 if start_date >= end_date:
@@ -367,14 +367,14 @@ indicator_options = [
 selected_indicators = st.sidebar.multiselect(
     "Select indicators to display:",
     options=indicator_options,
-    default=["Annual Return (%)", "Annual Volatility (%)", "Sharpe Ratio"]
+    default=indicator_options  # 默认全选所有指标
 )
 
 # ---- Chart Type Selection --------------------------------------------------
 st.sidebar.subheader("📊 Chart Visibility")
 show_line_chart = st.sidebar.checkbox("Cumulative Returns Line Chart", value=True)
 show_table = st.sidebar.checkbox("Risk & Return Summary Table", value=True)
-show_scatter = st.sidebar.checkbox("Risk-Return Scatter Plot", value=True)   # <-- NEW
+show_scatter = st.sidebar.checkbox("Risk-Return Scatter Plot", value=True)
 show_radar = st.sidebar.checkbox("Radar Chart", value=True)
 show_histogram = st.sidebar.checkbox("Daily Return Histogram", value=True)
 show_heatmap = st.sidebar.checkbox("Correlation Heatmap", value=True)
@@ -393,25 +393,22 @@ risk_free_rate = risk_free_rate_pct / 100
 # ---- Run Button ------------------------------------------------------------
 run_analysis = st.sidebar.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
-# =============================================================================
-# LOAD DATA (Always from local sample_stock_data.csv)
-# =============================================================================
-raw_data = load_sample_data()
 
-# =============================================================================
-# MAIN CONTENT AREA (Right Panel)
-# =============================================================================
+# -----------------------------------------------------------------------------
+# MAIN CONTENT AREA
+# -----------------------------------------------------------------------------
 
-if run_analysis:
-    # Filter data by date range
-    adj_close = raw_data.loc[(raw_data.index >= pd.Timestamp(start_date)) &
-                             (raw_data.index <= pd.Timestamp(end_date))]
+if run_analysis and selected_tickers:
+    # Filter data by date range and selected tickers
+    adj_close = raw_data.loc[
+        (raw_data.index >= pd.Timestamp(start_date)) &
+        (raw_data.index <= pd.Timestamp(end_date)),
+        selected_tickers
+    ].copy()
 
-    available_tickers = [t for t in tickers if t in adj_close.columns]
-    if not available_tickers:
-        st.error(f"None of the requested tickers {tickers} found in the data.")
+    if adj_close.empty:
+        st.error("No data available for the selected date range.")
         st.stop()
-    adj_close = adj_close[available_tickers]
 
     # Compute metrics
     with st.spinner("⏳ Computing risk and return metrics..."):
@@ -446,7 +443,7 @@ if run_analysis:
     # =========================================================================
     st.markdown("## 📊 Analysis Results")
 
-    # ---- Cumulative Returns Line Chart ----
+    # 1. Line chart
     if show_line_chart:
         with st.container():
             st.markdown("### 📈 Cumulative Returns")
@@ -454,19 +451,16 @@ if run_analysis:
             st.plotly_chart(fig_line, use_container_width=True)
             st.markdown("---")
 
-    # ---- Risk & Return Summary Table with Color ----
+    # 2. Summary table with colors
     if show_table and summary_df is not None:
         with st.container():
             st.markdown("### 📋 Risk & Return Summary")
             styled_table = style_summary_table(summary_df)
-            st.dataframe(
-                styled_table,
-                use_container_width=True
-            )
+            st.dataframe(styled_table, use_container_width=True)
             st.markdown("---")
 
-    # ---- NEW: Risk-Return Scatter Plot ----
-    if show_scatter and len(available_tickers) >= 1:
+    # 3. Scatter plot
+    if show_scatter and len(selected_tickers) >= 1:
         with st.container():
             st.markdown("### 🫧 Risk-Return Scatter Plot")
             fig_scatter = create_scatter_plot(annual_return, annual_volatility, sharpe_ratio)
@@ -474,8 +468,8 @@ if run_analysis:
             st.markdown("*Each point represents a stock. Bubble size reflects the Sharpe Ratio.*")
             st.markdown("---")
 
-    # ---- Radar Chart ----
-    if show_radar and len(available_tickers) >= 1:
+    # 4. Radar chart
+    if show_radar and len(selected_tickers) >= 1:
         with st.container():
             st.markdown("### 🕸️ Radar Chart — Metric Comparison")
             fig_radar = create_radar_chart(adj_close)
@@ -483,16 +477,16 @@ if run_analysis:
             st.markdown("*Radar chart values are normalized to 0–100. Higher is better; for volatility, drawdown, and VaR, the scale is inverted.*")
             st.markdown("---")
 
-    # ---- Side-by-side: Histogram + Correlation Heatmap ----
+    # 5. Side‑by‑side: Histogram + Correlation Heatmap
     if show_histogram or show_heatmap:
         col_left, col_right = st.columns(2, gap="medium")
 
         with col_left:
-            if show_histogram and len(available_tickers) >= 1:
+            if show_histogram and len(selected_tickers) >= 1:
                 st.markdown("### 📊 Daily Return Distribution")
                 selected_ticker_hist = st.selectbox(
                     "Select ticker for histogram:",
-                    options=available_tickers,
+                    options=selected_tickers,
                     key="hist_ticker"
                 )
                 fig_hist = create_returns_histogram(daily_returns, selected_ticker_hist)
@@ -502,7 +496,7 @@ if run_analysis:
                 st.empty()
 
         with col_right:
-            if show_heatmap and len(available_tickers) >= 2:
+            if show_heatmap and len(selected_tickers) >= 2:
                 st.markdown("### 🔥 Correlation Heatmap")
                 fig_heatmap = create_correlation_heatmap(daily_returns)
                 st.plotly_chart(fig_heatmap, use_container_width=True)
@@ -510,16 +504,18 @@ if run_analysis:
             else:
                 st.empty()
 
-    # If all charts are hidden
+    # Fallback if all toggles are off
     if not any([show_line_chart, show_table, show_scatter, show_radar, show_histogram, show_heatmap]):
         st.info("All charts are currently hidden. Please tick the checkboxes in the sidebar to display them.")
 
+elif run_analysis and not selected_tickers:
+    st.warning("Please select at least one stock from the sidebar.")
 else:
     st.info("👈 Configure the parameters in the left sidebar and click **Run Analysis** to begin.")
     st.markdown("""
     ### 📌 How to Use This Dashboard
 
-    1. **Select stock tickers** (e.g., AAPL, MSFT, GOOGL).
+    1. **Select stocks** from the dropdown (populated from your CSV file).
     2. **Set the date range** for analysis.
     3. **Choose which indicators** to display in the summary table.
     4. **Toggle charts** on/off as needed.
